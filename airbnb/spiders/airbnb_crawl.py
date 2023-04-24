@@ -1,18 +1,106 @@
+import logging
 import scrapy
 import json
 import unicodedata # needed to replace \xa0 with a space
+import pandas as pd
+from ..items import HostItem, ReviewItem, RoomItem
+from urllib.parse import urlencode
+import math
+from scrapy.exceptions import CloseSpider
 
 class AirbnbCrawlSpider(scrapy.Spider):
     name = "airbnb_crawl"
     allowed_domains = ["airbnb.cz"]
-    start_urls = [r"https://airbnb.cz//s/%C4%8Cesk%C3%A1-republika/homes?tab_id=home_tab&refinement_paths%5B%5D=%2Fhomes&flexible_trip_lengths%5B%5D=one_week&price_filter_input_type=0&price_filter_num_nights=5&channel=EXPLORE&query=%C4%8Cesk%C3%A1%20republika&place_id=ChIJQ4Ld14-UC0cRb1jb03UcZvg&date_picker_type=calendar&source=structured_search_input_header"]
+    ID = 18081993
+    start_urls = [f"https://www.airbnb.com/rooms/{ID}"]
+
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name, **kwargs)
+        self.sections: dict = None
+        self.my_df: pd.DataFrame = None
+        # for reviews
+        self.iterations = 0 # number of iterations to go through
+        self.curr_i = 0 # current iteration 
+
+        self.headers = {
+            'x-airbnb-api-key': 'd306zoyjsyarp7ifhu67rjxn52tv0t20',
+        }
+
+        self.params = {
+            'operationName': 'PdpReviews',
+            'locale': 'en',
+            'variables': '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"18081993","showingTranslationButton":false,"numberOfAdults":"1","numberOfChildren":"0","numberOfInfants":"0"}}',
+            'extensions': '{"persistedQuery":{"version":1,"sha256Hash":"22574ca295dcddccca7b9c2e3ca3625a80eb82fbdffec34cb664694730622cab"}}',
+        }
+
 
     def parse(self, response):
+        room = RoomItem() # this will contain all info about the room
+
+        # loading data
         data = json.loads(unicodedata.normalize("NFKD", response.xpath("//script[@id='data-deferred-state']/text()").get()))
-        floats = data['niobeMinimalClientData'][0][1]['data']['presentation']['explore']['sections']['sectionIndependentData']['staysSearch']['searchResults']
-        for float in floats:
-            rating = float['listing']['avgRatingLocalized']
-            rating = rating[:rating.find(' ')].replace(',' , '.')
-            city = float['listing']['city']
-            price = float['pricingQuote']['primaryLine']['price'][:-3].replace(' ', '')
-            period = float['pricingQuote']['primaryLine']['qualifier']
+        self.sections = data["niobeMinimalClientData"][0][1]['data']['presentation']['stayProductDetailPage']['sections']['sections']
+        self.my_df = pd.json_normalize(self.sections)
+        
+    
+        # hosts
+        hosts_list = self._get_section("HOST_PROFILE_DEFAULT")
+
+        ad_hosts = hosts_list['additionalHosts']
+        room['hosts'] = [self._get_host(host) for host in ad_hosts]  if ad_hosts else\
+                        [self._get_host(hosts_list['hostAvatar'], True)]
+        
+        
+        # name of the apartment
+
+        room['room_title'] = self._get_section('TITLE_DEFAULT')['title']
+        
+        
+        yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.params),
+                      callback=self.parse_reviews,
+                      headers=self.headers,
+                      dont_filter=True,
+                      cb_kwargs={'room': room})
+
+    def parse_reviews(self, response, room):
+        js = response.json()
+        if not self.iterations:
+            self.iterations = math.ceil(js['data']['merlin']['pdpReviews']['metadata']['reviewsCount'] / 7)
+
+        if not room.get('reviews'):
+            room['reviews'] = []
+
+        for r in js['data']['merlin']['pdpReviews']['reviews']:
+            item = ReviewItem()
+            item['rating'] = r['rating']
+            if r['language'] != 'en' and r['language'] != 'und': # und is undetermined
+                item['text'] = r['localizedReview']['comments']
+            else:
+                item['text'] = r['comments']
+            item['id'] = r['id']
+            room['reviews'].append(item)
+
+        if self.curr_i < self.iterations-1:
+            self.curr_i += 1
+            self.params['variables'] = '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"18081993","offset":"%s","showingTranslationButton":false,"numberOfAdults":"1","numberOfChildren":"0","numberOfInfants":"0"}}' % (7*self.curr_i)
+            yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.params),
+                        callback=self.parse_reviews,
+                        headers=self.headers,
+                        dont_filter=True,
+                        cb_kwargs={'room': room})
+        else:
+            yield room
+
+
+    def _get_section(self, section_name: str) -> dict:
+        return self.sections[self.my_df[self.my_df['sectionComponentType'] == section_name].index[0]]['section']
+
+    def _get_host(self, host: dict, is_superhost = False) -> HostItem:
+        avatar = host if is_superhost else host['avatar']
+        item = HostItem()
+        label = avatar['avatarImage']['accessibilityLabel']
+        item['is_superhost'] = is_superhost or 'superhost' in label
+        item['host_name'] = host.get('name') or label[label.rfind("Learn more about")+17:-1]
+        item['id'] = avatar['userId']
+        item['avatar'] = avatar['avatarImage']['baseUrl']
+        return item

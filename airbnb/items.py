@@ -5,8 +5,20 @@
 
 import scrapy
 
+class RoomItem(scrapy.Item):
+    hosts = scrapy.Field()
+    room_title = scrapy.Field()
+    reviews = scrapy.Field()
 
-class AirbnbItem(scrapy.Item):
+class HostItem(scrapy.Item):
     # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+    id = scrapy.Field()
+    host_name = scrapy.Field()
+    is_superhost = scrapy.Field()
+    avatar = scrapy.Field()
+
+
+class ReviewItem(scrapy.Item):
+    id = scrapy.Field()
+    text = scrapy.Field()
+    rating = scrapy.Field()
