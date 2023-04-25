@@ -10,7 +10,7 @@ import math
 class AirbnbCrawlSpider(scrapy.Spider):
     name = "airbnb_crawl"
     allowed_domains = ["airbnb.com"]
-    ID = 18081993 # 18081993 1016153
+    ID = 1016153 # 18081993 1016153
     start_urls = [f"https://www.airbnb.com/rooms/{ID}"]
 
     def __init__(self, name=None, **kwargs):
@@ -28,7 +28,7 @@ class AirbnbCrawlSpider(scrapy.Spider):
         self.review_params = {
             'operationName': 'PdpReviews',
             'locale': 'en',
-            'variables': '{"request":{"forPreview":false,"limit":7,"listingId":"%s"}}' \
+            'variables': '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"%s"}}' \
                 % self.ID,
             'extensions': '{"persistedQuery":{"sha256Hash":"22574ca295dcddccca7b9c2e3ca3625a80eb82fbdffec34cb664694730622cab"}}'
         }
@@ -99,19 +99,20 @@ class AirbnbCrawlSpider(scrapy.Spider):
         if not room.get('reviews'):
             room['reviews'] = []
 
-        for r in js['data']['merlin']['pdpReviews']['reviews']:
+        for review in js['data']['merlin']['pdpReviews']['reviews']:
             item = ReviewItem()
-            item['rating'] = r['rating']
-            if r['language'] != 'en' and r['language'] != 'und': # und is undetermined
-                item['text'] = r['localizedReview']['comments']
+            item['rating'] = review['rating']
+            if review['language'] != 'en' and review['language'] != 'und': # und is undetermined
+                item['text'] = review['localizedReview']['comments']
             else:
-                item['text'] = r['comments']
-            item['id'] = r['id']
+                item['text'] = review['comments']
+            item['id'] = review['id']
             room['reviews'].append(item)
 
-        if self.curr_i < self.iterations-1:
+        if self.curr_i < self.iterations - 1:
             self.curr_i += 1
-            self.review_params['variables'] += ',"offset":"%s"}}' % (7*self.curr_i) # adds offset parameter
+            self.review_params['variables'] = '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"%s","offset":"%s"}}}}' \
+                % self.ID, (7*self.curr_i) # configures offset parameter
             yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.review_params),
                         callback=self.parse_reviews,
                         headers=self.headers,
