@@ -10,7 +10,7 @@ import math
 class AirbnbCrawlSpider(scrapy.Spider):
     name = "airbnb_crawl"
     allowed_domains = ["airbnb.com"]
-    ID = 18081993 # 18081993 1016153
+    ID = 1016153 # 18081993 1016153
     start_urls = [f"https://www.airbnb.com/rooms/{ID}"]
 
     def __init__(self, name=None, **kwargs):
@@ -28,7 +28,7 @@ class AirbnbCrawlSpider(scrapy.Spider):
         self.review_params = {
             'operationName': 'PdpReviews',
             'locale': 'en',
-            'variables': '{"request":{"forPreview":false,"limit":7,"listingId":"%s"}}' \
+            'variables': '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"%s"}}' \
                 % self.ID,
             'extensions': '{"persistedQuery":{"sha256Hash":"22574ca295dcddccca7b9c2e3ca3625a80eb82fbdffec34cb664694730622cab"}}'
         }
@@ -109,8 +109,9 @@ class AirbnbCrawlSpider(scrapy.Spider):
             item['id'] = r['id']
             room['reviews'].append(item)
 
-        if self.curr_i < self.iterations-1:
+        if self.curr_i < self.iterations - 1:
             self.curr_i += 1
+            self.review_params['variables'] = self.review_params['variables'][:-2]
             self.review_params['variables'] += ',"offset":"%s"}}' % (7*self.curr_i) # adds offset parameter
             yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.review_params),
                         callback=self.parse_reviews,
