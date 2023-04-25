@@ -111,7 +111,8 @@ class AirbnbCrawlSpider(scrapy.Spider):
 
         if self.curr_i < self.iterations - 1:
             self.curr_i += 1
-            self.review_params['variables'] += ',"offset":"%s"}}' % (7*self.curr_i) # adds offset parameter
+            self.review_params['variables'] = '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"%s","offset":"%s"}}' \
+                % self.ID, (7*self.curr_i) # configures offset parameter
             yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.review_params),
                         callback=self.parse_reviews,
                         headers=self.headers,
