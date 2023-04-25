@@ -9,6 +9,7 @@ class RoomItem(scrapy.Item):
     hosts = scrapy.Field()
     room_title = scrapy.Field()
     reviews = scrapy.Field()
+    images = scrapy.Field() 
 
 class HostItem(scrapy.Item):
     # define the fields for your item here like:
@@ -22,3 +23,10 @@ class ReviewItem(scrapy.Item):
     id = scrapy.Field()
     text = scrapy.Field()
     rating = scrapy.Field()
+
+
+class PhotoItem(scrapy.Item):
+    orientation = scrapy.Field()
+    url = scrapy.Field()
+    id = scrapy.Field()
+    aspectRatio = scrapy.Field()

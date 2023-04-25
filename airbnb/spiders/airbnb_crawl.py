@@ -3,15 +3,14 @@ import scrapy
 import json
 import unicodedata # needed to replace \xa0 with a space
 import pandas as pd
-from ..items import HostItem, ReviewItem, RoomItem
+from ..items import HostItem, PhotoItem, ReviewItem, RoomItem
 from urllib.parse import urlencode
 import math
-from scrapy.exceptions import CloseSpider
 
 class AirbnbCrawlSpider(scrapy.Spider):
     name = "airbnb_crawl"
-    allowed_domains = ["airbnb.cz"]
-    ID = 18081993
+    allowed_domains = ["airbnb.com"]
+    ID = 18081993 # 18081993 1016153
     start_urls = [f"https://www.airbnb.com/rooms/{ID}"]
 
     def __init__(self, name=None, **kwargs):
@@ -25,12 +24,13 @@ class AirbnbCrawlSpider(scrapy.Spider):
         self.headers = {
             'x-airbnb-api-key': 'd306zoyjsyarp7ifhu67rjxn52tv0t20',
         }
-
-        self.params = {
+        
+        self.review_params = {
             'operationName': 'PdpReviews',
             'locale': 'en',
-            'variables': '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"18081993","showingTranslationButton":false,"numberOfAdults":"1","numberOfChildren":"0","numberOfInfants":"0"}}',
-            'extensions': '{"persistedQuery":{"version":1,"sha256Hash":"22574ca295dcddccca7b9c2e3ca3625a80eb82fbdffec34cb664694730622cab"}}',
+            'variables': '{"request":{"forPreview":false,"limit":7,"listingId":"%s"}}' \
+                % self.ID,
+            'extensions': '{"persistedQuery":{"sha256Hash":"22574ca295dcddccca7b9c2e3ca3625a80eb82fbdffec34cb664694730622cab"}}'
         }
 
 
@@ -55,8 +55,37 @@ class AirbnbCrawlSpider(scrapy.Spider):
 
         room['room_title'] = self._get_section('TITLE_DEFAULT')['title']
         
-        
-        yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.params),
+        # photos
+        stays_id = json.loads(data["niobeMinimalClientData"][0][0][17:])['id']
+        params = {
+            'operationName': 'StaysPdpSections',
+            'locale': 'en',
+            'variables': '{"id":"%s","pdpSectionsRequest":{"layouts":["SIDEBAR","SINGLE_COLUMN"]}}' % stays_id,
+            'extensions': '{"persistedQuery":{"sha256Hash":"3aebb59d292ede4bb8fa8b61528d50b5f55fcf40cae4034fc09e0b632ca9fbb8"}}',
+        }
+
+        yield scrapy.Request(url='https://www.airbnb.com/api/v3/StaysPdpSections?' + urlencode(params),
+                             cb_kwargs={'room': room},
+                             headers=self.headers,
+                             callback=self.parse_photos)
+
+    def parse_photos(self, response, room):
+        js = response.json()
+
+        self.sections = js["data"]["presentation"]["stayProductDetailPage"]["sections"]["sections"]
+        self.my_df = pd.json_normalize(self.sections)
+        images = self._get_section("PHOTO_TOUR_SCROLLABLE")["mediaItems"]
+
+        if not room.get('images'):
+            room['images'] = []
+
+        for i in images:
+            img = PhotoItem({k:i[k] for k in ['orientation', 'id', 'aspectRatio']})
+            img['url'] = i['baseUrl']
+            room['images'].append(img)
+
+        # reviews
+        yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.review_params),
                       callback=self.parse_reviews,
                       headers=self.headers,
                       dont_filter=True,
@@ -82,8 +111,8 @@ class AirbnbCrawlSpider(scrapy.Spider):
 
         if self.curr_i < self.iterations-1:
             self.curr_i += 1
-            self.params['variables'] = '{"request":{"fieldSelector":"for_p3_translation_only","forPreview":false,"limit":7,"listingId":"18081993","offset":"%s","showingTranslationButton":false,"numberOfAdults":"1","numberOfChildren":"0","numberOfInfants":"0"}}' % (7*self.curr_i)
-            yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.params),
+            self.review_params['variables'] += ',"offset":"%s"}}' % (7*self.curr_i) # adds offset parameter
+            yield scrapy.Request(url="https://www.airbnb.com/api/v3/PdpReviews?" + urlencode(self.review_params),
                         callback=self.parse_reviews,
                         headers=self.headers,
                         dont_filter=True,
