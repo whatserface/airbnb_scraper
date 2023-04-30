@@ -1,6 +1,6 @@
 version: '3'
 services:
   scrapy:
-    image: airbnb_scraper
+    image: whatserface/airbnb_scraper
     volumes:
       - ./output:/python/airbnb/output
