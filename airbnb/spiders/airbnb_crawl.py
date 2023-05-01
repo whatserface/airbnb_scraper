@@ -118,7 +118,6 @@ class AirbnbCrawlSpider(scrapy.Spider):
         data = json.loads(unicodedata.normalize("NFKD", response.xpath("//script[@id='data-state']/text()").get()))
 
         curr_host = self.host_number - len(viewed_hosts)
-        logging.debug(f"dsdsad {curr_host}, {viewed_hosts}")
 
         host: HostItem = viewed_hosts[0]
         profile_info = data['niobeMinimalClientData'][2][1]['data']['presentation']['userProfileContainer']['userProfile']
@@ -190,11 +189,8 @@ class AirbnbCrawlSpider(scrapy.Spider):
             else:
                 item['response'] = ResponseItem()
                 item['response']['respondedAt'] = review['localizedRespondedDate']
-                if review['localizedReview']:
-                    item['response']['text'] = review['localizedReview']['comments']
-                    item['response']['originalLanguage'] = review['localizedReview']['commentsLanguage']
-                item['response']['text'] = review['response']
-                item['response']['originalLanguage'] = 'en'
+                item['response']['text'] = (review['localizedReview'] if review['localizedReview'] else review)\
+                                            ['response']
                 item['response']['respondentId'] = review['reviewee']['id']
 
             item['reviewer'] = ReviewerItem()

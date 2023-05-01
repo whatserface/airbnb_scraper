@@ -41,7 +41,6 @@ class ResponseItem(scrapy.Item):
     respondentId = scrapy.Field()
     text = scrapy.Field() 
     respondedAt = scrapy.Field()
-    originalLanguage = scrapy.Field()
 
 
 class ReviewerItem(scrapy.Item):
