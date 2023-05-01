@@ -2,14 +2,14 @@
 
 Manual:
 
-- To obey robots.txt file type in terminal:
+- To obey the robots.txt file, type in terminal:
 "scrapy crawl airbnb_crawl -s ROBOTSTXT_OBEY=True"
 By default it's ignored.
 
-- To specify ID of the crawled room type in terminal:
+- To specify the ID of the crawled room, type in terminal:
 "scrapy crawl airbnb_crawl -a ID=your_id"
 
-- To specify output directory and name type in terminal: scrapy crawl airbnb_crawl -o your/output.json
+- To specify the output directory and name, type in terminal: scrapy crawl airbnb_crawl -o your/output.json
 This will go to the root directory, make a "your" directory and create an "output.json" file.
 
 - Note:
@@ -240,6 +240,6 @@ class AirbnbCrawlSpider(scrapy.Spider):
             label = avatar['avatarImage']['accessibilityLabel']
             item['isSuperhost'] = is_superhost or 'superhost' in label
             item['hostName'] = host.get('name') or label[label.rfind("Learn more about")+17:-1]
-            item['profilePictureUrl'] = avatar['avatarImage']['baseUrl']
+            item['profilePictureUrl'] = avatar['avatarImage']['baseUrl'].split('?')[0]
         return item
     
