@@ -195,8 +195,10 @@ class AirbnbCrawlSpider(scrapy.Spider):
             else:
                 item['response'] = ResponseItem()
                 item['response']['respondedAt'] = review['localizedRespondedDate']
-                item['response']['text'] = (review['localizedReview'] if review['localizedReview'] else review)\
-                                            ['response']
+                if review['localizedReview'] and review['localizedReview']['response']:
+                    item['response']['text'] = review['localizedReview']['response']
+                else:
+                    item['response']['text'] = review['response']
                 item['response']['respondentId'] = review['reviewee']['id']
 
             item['reviewer'] = ReviewerItem()
