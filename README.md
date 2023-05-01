@@ -16,4 +16,4 @@ By default it's ignored.
   With image urls there are some parameters that change the size of pictures
 (these are specified after (?) the question mark), such as: 
   - `aki_policy=profile_x_medium, poster or profile_large`
-  - `im_w=240, 480, 720 or 1200`
+  - `im_w=240, 480, 720, 1200 or 1440`
