@@ -70,11 +70,12 @@ class AirbnbCrawlSpider(scrapy.Spider):
     def parse(self, response):
         room = RoomItem() # this will contain all info about the room
 
-        # loading data
+        # setup, loading data
         data = json.loads(unicodedata.normalize("NFKD", response.xpath("//script[@id='data-deferred-state']/text()").get()))
         self.sections = data["niobeMinimalClientData"][0][1]['data']['presentation']['stayProductDetailPage']['sections']['sections']
         self.my_df = pd.json_normalize(self.sections)
-        
+        ignore_robotstxt = not self.settings.getbool('ROBOTSTXT_OBEY')
+
         # getting api key (in case it changes over a period of time)
         self.headers['x-airbnb-api-key'] = (json.loads(response.xpath("//script[@id='data-state']/text()").get())
             ['bootstrapData']['layout-init']['api_config']['key'])
@@ -82,9 +83,10 @@ class AirbnbCrawlSpider(scrapy.Spider):
         # hosts
         hosts_list = self._get_section("HOST_PROFILE_DEFAULT")
 
+
         ad_hosts = hosts_list['additionalHosts']
-        room['hosts'] = [self._get_host_id(host) for host in ad_hosts]  if ad_hosts else\
-                        [self._get_host_id(hosts_list['hostAvatar'], True)]
+        room['hosts'] = [self._get_host(host, False, ignore_robotstxt) for host in ad_hosts]  if ad_hosts else\
+                        [self._get_host(hosts_list['hostAvatar'], True, ignore_robotstxt)]
         
         self.host_number = len(room['hosts'])
         
@@ -109,7 +111,7 @@ class AirbnbCrawlSpider(scrapy.Spider):
                             )
 
         # get additional info about host, if possible
-        if not self.settings['ROBOTSTXT_OBEY']:
+        if ignore_robotstxt:
             yield scrapy.Request(url=f'https://www.airbnb.com/users/show/{room["hosts"][0]["id"]}',
                              cb_kwargs={'room': room,
                                         'viewed_hosts': room['hosts']},
@@ -230,9 +232,14 @@ class AirbnbCrawlSpider(scrapy.Spider):
     def _get_section(self, section_name: str) -> dict:
         return self.sections[self.my_df[self.my_df['sectionComponentType'] == section_name].index[0]]['section']
 
-    def _get_host_id(self, host: dict, is_superhost = False) -> HostItem:
+    def _get_host(self, host: dict, is_superhost = False, get_only_ids=True) -> HostItem:
         avatar = host if is_superhost else host['avatar']
         item = HostItem()
         item['id'] = avatar['userId']
+        if not get_only_ids:
+            label = avatar['avatarImage']['accessibilityLabel']
+            item['isSuperhost'] = is_superhost or 'superhost' in label
+            item['hostName'] = host.get('name') or label[label.rfind("Learn more about")+17:-1]
+            item['profilePictureUrl'] = avatar['avatarImage']['baseUrl']
         return item
     
