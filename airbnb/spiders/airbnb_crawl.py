@@ -117,7 +117,8 @@ class AirbnbCrawlSpider(scrapy.Spider):
     def parse_hosts(self, response, room, viewed_hosts: list):
         data = json.loads(unicodedata.normalize("NFKD", response.xpath("//script[@id='data-state']/text()").get()))
 
-        current_host_number = self.host_number - len(viewed_hosts)
+        curr_host = self.host_number - len(viewed_hosts)
+        logging.debug(f"dsdsad {curr_host}, {viewed_hosts}")
 
         host: HostItem = viewed_hosts[0]
         profile_info = data['niobeMinimalClientData'][2][1]['data']['presentation']['userProfileContainer']['userProfile']
@@ -131,11 +132,12 @@ class AirbnbCrawlSpider(scrapy.Spider):
         # Exclude __typename values
         host['languages'] = [{k: d[k] for k in d if k != '__typename'} for d in host['languages']]
 
-        room['hosts'][current_host_number] = host
+        room['hosts'][curr_host] = host
 
         # if the current host isn't last
         if len(viewed_hosts) > 1:
-            yield scrapy.Request(url=f'https://www.airbnb.com/users/show/{host["id"]}',
+            curr_host += 1
+            yield scrapy.Request(url=f'https://www.airbnb.com/users/show/{room["hosts"][curr_host]["id"]}',
                                  cb_kwargs={'room': room,
                                         'viewed_hosts': viewed_hosts[1:]},
                                 callback=self.parse_hosts)
@@ -167,7 +169,7 @@ class AirbnbCrawlSpider(scrapy.Spider):
     def parse_reviews(self, response, room):
         js = response.json()
         if not self.iterations:
-            self.iterations = 2#math.ceil(js['data']['merlin']['pdpReviews']['metadata']['reviewsCount'] / 7)
+            self.iterations = math.ceil(js['data']['merlin']['pdpReviews']['metadata']['reviewsCount'] / 7)
 
         if not room.get('reviews'):
             room['reviews'] = []
@@ -233,8 +235,4 @@ class AirbnbCrawlSpider(scrapy.Spider):
         item = HostItem()
         item['id'] = avatar['userId']
         return item
-        # label = avatar['avatarImage']['accessibilityLabel']
-        # item['isSuperhost'] = is_superhost or 'superhost' in label
-        # item['hostName'] = host.get('name') or label[label.rfind("Learn more about")+17:-1]
-        # item['avatar'] = avatar['avatarImage']['baseUrl']
     
